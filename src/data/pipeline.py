@@ -1,5 +1,10 @@
 import pandas as pd
 from pathlib import Path
+import numpy as np
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from src.features.build_features import build_features
+
 
 RAW_DIR = Path(__file__).parent.parent.parent / "data" / "raw"
 PROCESSED_DIR = Path(__file__).parent.parent.parent / "data" / "processed"
@@ -67,11 +72,13 @@ def clean_data(roster, season):
 
     merged_df = season_filtered.merge(end_roster, on=["player_id", "season"], how = "inner")
     merged_df = merged_df[merged_df['games'] >= 4]  # Filter out low usage players (noise)
-    merged_df['draft_number'] = merged_df['draft_number'].fillna(300) 
-    merged_df['draft_club'] = merged_df['draft_club'].fillna('UDFA')
+    merged_df['draft_number'] = merged_df['draft_number'].replace(['nan', 'None'], '300').astype(float)
+    merged_df['draft_club'] = merged_df['draft_club'].replace('nan','UDFA')
 
 
     return merged_df
+
+
 
 def save_data(df):
     filepath = PROCESSED_DIR / 'processed_data.parquet'
@@ -80,6 +87,7 @@ def save_data(df):
 if __name__ == "__main__":
     seasonal, roster = load_data()
     df = clean_data(roster, seasonal)
+    df = build_features(df)
     save_data(df)
     print(f"Saved {len(df)} rows to {PROCESSED_DIR}")
 
