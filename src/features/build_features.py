@@ -50,10 +50,14 @@ def add_per_game(df):
 
 def add_lag(df):
     LAG_COLS = [
-    # Availability
+    # total volume features
     "games",
+    "attempts",
+    "carries",
+    "targets",
 
-    # Per-game volume features (created from PER_GAME_COLS)
+
+    # Per-game volume features
     "completions_pg",
     "attempts_pg",
     "passing_yards_pg",
@@ -100,9 +104,50 @@ def add_lag(df):
     df = df.dropna(subset=LAG_COLS)
     return df
 
+def remove_cols(df):
+    DROP_COLS = [
+        # Passing outcomes
+        "passing_yards",
+        "passing_tds",
+        "interceptions",
+        "sacks",
+        "passing_first_downs",
+
+        # Rushing outcomes
+        "rushing_yards",
+        "rushing_tds",
+        "rushing_first_downs",
+
+        # Receiving outcomes
+        "receiving_yards",
+        "receiving_tds",
+        "receiving_first_downs",
+        "receptions",
+
+        # General outcome totals
+        "completions",
+        
+        # Unecessary categoricals
+        "team",
+        "college",
+        "draft_club",
+        "season_type",
+        "player_id"
+    ]
+    df = df.drop(columns = DROP_COLS)
+    return df
+
+def convert_categoricals(df):
+    df['position'] = df['position'].astype('category')
+    df['era'] = df['era'].astype('category')
+    return df
+
+
 def build_features(df):
     df = df.sort_values(['player_id', 'season'])
     df = add_per_game(df)
-    df = add_lag(df)
     df = add_eras(df)
+    df = convert_categoricals(df)
+    df = add_lag(df)
+    df = remove_cols(df)
     return df

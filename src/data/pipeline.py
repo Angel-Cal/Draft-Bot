@@ -73,7 +73,6 @@ def clean_data(roster, season):
     merged_df = season_filtered.merge(end_roster, on=["player_id", "season"], how = "inner")
     merged_df = merged_df[merged_df['games'] >= 4]  # Filter out low usage players (noise)
     merged_df['draft_number'] = merged_df['draft_number'].replace(['nan', 'None'], '300').astype(float)
-    merged_df['draft_club'] = merged_df['draft_club'].replace('nan','UDFA')
 
 
     return merged_df
