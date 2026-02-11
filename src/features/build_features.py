@@ -2,6 +2,33 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 
+DELTA_SHIFT_COLS = [
+        "games",
+        "attempts",
+        "carries",
+        "targets",
+        "completions_pg",
+        "attempts_pg",
+        "passing_yards_pg",
+        "passing_tds_pg",
+        "interceptions_pg",
+        "sacks_pg",
+        "passing_first_downs_pg",    
+        "carries_pg",
+        "rushing_yards_pg",
+        "rushing_tds_pg",
+        "rushing_first_downs_pg",
+        "targets_pg",
+        "receptions_pg",
+        "receiving_yards_pg",
+        "receiving_tds_pg",
+        "receiving_first_downs_pg",
+        "target_share",
+        "air_yards_share",
+        "wopr_x",
+        "dom",
+        "w8dom" 
+    ]    
 def add_eras(df):
     conditions = [
         df['season'] <= 2016,
@@ -98,12 +125,23 @@ def add_lag(df):
     "fantasy_points_ppr",
     "ppr_sh",
 ]
-
+    
     df["target_ppr"] = df["fantasy_points_ppr"]
+    delta_df = df.copy()
+    delta_df[DELTA_SHIFT_COLS] = (df.groupby("player_id")[DELTA_SHIFT_COLS].shift(2))
     df[LAG_COLS] = (df.groupby("player_id")[LAG_COLS].shift(1))
     df = df.dropna(subset=LAG_COLS)
-    return df
+    return df, delta_df
 
+def compute_deltas(df, delta_df):
+    for col in DELTA_SHIFT_COLS:
+        df[f"{col}_delta"] = df[col] - delta_df[col]
+    delta_cols = [f"{col}_delta" for col in DELTA_SHIFT_COLS]
+    df[delta_cols] = df[DELTA_SHIFT_COLS].fillna(0)
+    return df
+ 
+    
+    
 def remove_cols(df):
     DROP_COLS = [
         # Passing outcomes
@@ -148,6 +186,7 @@ def build_features(df):
     df = add_per_game(df)
     df = add_eras(df)
     df = convert_categoricals(df)
-    df = add_lag(df)
+    df, delta_df = add_lag(df)
+    df = compute_deltas(df, delta_df)
     df = remove_cols(df)
     return df
