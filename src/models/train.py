@@ -79,8 +79,12 @@ class Model:
             rmse = lk.root_mean_squared_error(y_test[mask], y_pred[mask])
             print("Metric for position: ", pos, "\nMAE: ", mae, "\nr2:", r2, "\nRMSE: ", rmse, "\n")
 
-
-
+    def ablate(self, x_train, x_test, x_val, exclude_patterns = []):
+        drop_cols = [c for c in x_train.columns if any(p in c for p in exclude_patterns)]
+        x_train = x_train.drop(columns = drop_cols)
+        x_test = x_test.drop(columns = drop_cols)
+        x_val = x_val.drop(columns = drop_cols)
+        return x_train, x_test, x_val
 
 if __name__ == "__main__":
     filepath = Path(__file__).parent.parent.parent / "data" / "processed"/ 'processed_data.parquet'
@@ -88,11 +92,37 @@ if __name__ == "__main__":
     df = pd.read_parquet(filepath)
     model = Model()
     x_train, x_val, x_test, y_train, y_val, y_test = model.temporal_splits(df)
+    x_train_org = x_train
+    x_val_org = x_val
+    x_test_org = x_test
     positions = x_test["position"]
     trained_model = model.train_model(x_train, x_val, y_train, y_val)
-    model.evaluate_per_position(trained_model, x_test, y_test, positions)
+    mae, r2, rmse = model.evaluate_model(trained_model, x_test, y_test)
+    print("Baseline:\nMAE: ", mae, "R2: ", r2, "RMSE: ", rmse, "\n")
 
+    # # Ablate Deltas
+    # x_train, x_test, x_val = model.ablate(x_train_org, x_test_org, x_val_org, exclude_patterns=['_delta'])
+    # trained_model = model.train_model(x_train, x_val, y_train, y_val)
     # mae, r2, rmse = model.evaluate_model(trained_model, x_test, y_test)
-    # print("MAE: ", mae, "R2: ", r2, "RMSE: ", rmse, "\n")
+    # print("Delta Ablation:\nMAE: ", mae, "R2: ", r2, "RMSE: ", rmse, "\n")
+
+    # # Ablate surge
+    # x_train, x_test,x_val = model.ablate(x_train_org, x_test_org, x_val_org,exclude_patterns=['late_'])
+    # trained_model = model.train_model(x_train, x_val, y_train, y_val)
+    # mae, r2, rmse = model.evaluate_model(trained_model, x_test, y_test)
+    # print("Surge Ablation:\nMAE: ", mae, "R2: ", r2, "RMSE: ", rmse, "\n")
+
+    # # Ablate both
+    # x_train, x_test, x_val = model.ablate(x_train_org, x_test_org, x_val_org, exclude_patterns=['late_', '_delta'])
+    # trained_model = model.train_model(x_train, x_val, y_train, y_val)
+    # mae, r2, rmse = model.evaluate_model(trained_model, x_test, y_test)
+    # print("Delta + Surge Ablation:\nMAE: ", mae, "R2: ", r2, "RMSE: ", rmse, "\n")
+
+  
+
+    #model.evaluate_per_position(trained_model, x_test, y_test, positions)
+
+   
+
     # lgb.plot_importance(trained_model, max_num_features=15, importance_type="gain")
     # plt.show()

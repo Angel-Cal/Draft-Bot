@@ -34,21 +34,7 @@ DELTA_SHIFT_COLS = [
         "dom",
         "w8dom" 
     ]    
-def add_eras(df):
-    conditions = [
-        df['season'] <= 2016,
-        df['season'].between(2017, 2019),
-        df['season'] >= 2020
-    ]
 
-    choices = [
-        'pre_rpo',
-        'early_rpo',
-        'modern'
-    ]
-
-    df['era'] = np.select(conditions, choices)
-    return df
 
 def add_per_game(df):
     PER_GAME_COLS = [
@@ -229,14 +215,12 @@ def remove_cols(df):
 
 def convert_categoricals(df):
     df['position'] = df['position'].astype('category')
-    df['era'] = df['era'].astype('category')
     return df
 
 
 def build_features(df):
     df = df.sort_values(['player_id', 'season'])
     df = add_per_game(df)
-    df = add_eras(df)
     df = convert_categoricals(df)
     df = add_surge_features(df)
     df, delta_df = add_lag(df)
