@@ -9,32 +9,62 @@ import matplotlib.pyplot as plt
 
 
 class Model:
-    def __init__(self, mode = "simple", train_range = (range(2015, 2023)), val_season = 2023, test_season = 2024):
-        self.mode = mode
+    def __init__(self, train_range = (range(2015, 2023)), val_season = 2023, test_season = 2024):
         self.train_range = train_range
         self.val_season = val_season
         self.test_season = test_season
 
     def temporal_splits(self, df):
-        if self.mode == "simple":
-            x_train = df[df["season"].isin(self.train_range)]
+        x_train = df[df["season"].isin(self.train_range)]
+        y_train = x_train["target_ppr"]
+        x_train = x_train.drop(columns = ["target_ppr", "season"])
+
+        x_val = df[df["season"] == self.val_season]
+        y_val = x_val["target_ppr"]
+        x_val = x_val.drop(columns =["target_ppr", "season"])
+
+        x_test = df[df["season"] == self.test_season]
+        y_test = x_test["target_ppr"]
+        x_test = x_test.drop(columns = ["target_ppr", "season"])
+
+        return x_train, x_val, x_test, y_train, y_val, y_test
+     
+        
+    def rolling_splits(self, df, min_train_seasons=6, offset=1):
+        FIRST_SEASON = 2015
+        LAST_SEASON = 2024
+        df_list =[]
+        first_test = FIRST_SEASON + min_train_seasons
+        for test_season in range(first_test, LAST_SEASON + 1):
+            val_season = test_season - offset
+            train_range = range(FIRST_SEASON, val_season)
+
+            x_train = df[df["season"].isin(train_range)]
             y_train = x_train["target_ppr"]
             x_train = x_train.drop(columns = ["target_ppr", "season"])
 
-            x_val = df[df["season"] == self.val_season]
+            x_val = df[df["season"] == val_season]
             y_val = x_val["target_ppr"]
             x_val = x_val.drop(columns =["target_ppr", "season"])
 
-            x_test = df[df["season"] == self.test_season]
+            x_test = df[df["season"] == test_season]
             y_test = x_test["target_ppr"]
             x_test = x_test.drop(columns = ["target_ppr", "season"])
+            
+            df_list.append((x_train, x_val, x_test, y_train, y_val, y_test)) 
+        return df_list
+    
+    def walk_forward(self, df_list):
+        metrics_list = []
+        for fold in df_list:
+           x_train, x_val, x_test, y_train, y_val, y_test = fold
+           trained_model= self.train_model(x_train, x_val, y_train, y_val)
+           mae, r2, rmse = self.evaluate_model(trained_model, x_test, y_test)
+           metrics_list.append((mae, r2, rmse))
+        return metrics_list
+            
 
-            return x_train, x_val, x_test, y_train, y_val, y_test
-        elif self.mode == "rolling":
-            raise NotImplementedError("Rolling mode to be implemented in v2")
 
-        else:
-            raise ValueError(f"unknown mode: {self.mode}")
 
     def train_model(self, x_train, x_val, y_train, y_val):
         model = lgb.LGBMRegressor(
@@ -99,6 +129,14 @@ if __name__ == "__main__":
     trained_model = model.train_model(x_train, x_val, y_train, y_val)
     mae, r2, rmse = model.evaluate_model(trained_model, x_test, y_test)
     print("Baseline:\nMAE: ", mae, "R2: ", r2, "RMSE: ", rmse, "\n")
+
+    df_list = model.rolling_splits(df)
+    metrics_list = model.walk_forward(df_list)
+    counter =1
+    for metrics in metrics_list:
+        mae, r2, rmse = metrics
+        print("Fold ", counter, "metrics\nMAE: ", mae, "R2: ", r2, "RMSE: ", rmse )
+        counter+=1
 
     # # Ablate Deltas
     # x_train, x_test, x_val = model.ablate(x_train_org, x_test_org, x_val_org, exclude_patterns=['_delta'])
