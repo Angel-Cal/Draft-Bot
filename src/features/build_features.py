@@ -1,6 +1,11 @@
 import pandas as pd
 from pathlib import Path
 import numpy as np
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+RAW_DIR = Path(__file__).parent.parent.parent / "data" / "raw"
+
+
 
 DELTA_SHIFT_COLS = [
         "games",
@@ -124,6 +129,9 @@ def add_lag(df):
     "fantasy_points",
     "fantasy_points_ppr",
     "ppr_sh",
+
+    "late_target_pct",
+    "late_snap_pct"
 ]
     
     df["target_ppr"] = df["fantasy_points_ppr"]
@@ -133,6 +141,50 @@ def add_lag(df):
     df = df.dropna(subset=LAG_COLS)
     return df, delta_df
 
+def add_surge_features(df):
+    snaps = pd.read_parquet(RAW_DIR/'snap_counts_20_25.parquet')
+    id = pd.read_parquet(RAW_DIR/'ids.parquet')
+    pbp = pd.read_parquet(RAW_DIR/'pbp_20_25.parquet')
+
+    # Compute target pct
+    pass_plays = pbp[pbp['receiver_player_id'].notna()]
+    full_targets = (pass_plays
+        .groupby(['receiver_player_id', 'season'])
+        .size()
+        .reset_index(name='full_targets'))
+    full_targets = full_targets[full_targets['full_targets'] >= 10]
+    late_targets = (pass_plays[pass_plays['week'] >= 13]
+        .groupby(['receiver_player_id', 'season'])
+        .size()
+        .reset_index(name='late_targets'))
+    target_surge = full_targets.merge(late_targets, on=['receiver_player_id', 'season'], how='left')
+    target_surge['late_targets'] = target_surge['late_targets'].fillna(0)
+    target_surge['late_target_pct'] = target_surge['late_targets'] / target_surge['full_targets']
+    target_surge = target_surge.rename(columns={'receiver_player_id': 'player_id'})
+
+    # Compute snap pct
+    id_lookup = id[['gsis_id', 'pfr_id']].dropna(subset=['gsis_id', 'pfr_id']).drop_duplicates()
+    snaps = snaps.merge(id_lookup, left_on='pfr_player_id', right_on='pfr_id', how='left')
+    snaps = snaps.dropna(subset=['gsis_id'])
+    late_snaps = (snaps[snaps['week'] >= 13]
+        .groupby(['gsis_id', 'season'])['offense_snaps']
+        .sum()
+        .reset_index(name='late_snaps'))
+    full_snaps = (snaps
+        .groupby(['gsis_id', 'season'])['offense_snaps']
+        .sum()
+        .reset_index(name='full_snaps'))
+    full_snaps = full_snaps[full_snaps['full_snaps'] > 0]
+    snap_surge = full_snaps.merge(late_snaps, on=['gsis_id', 'season'], how='left')
+    snap_surge['late_snaps'] = snap_surge['late_snaps'].fillna(0)
+    snap_surge['late_snap_pct'] = snap_surge['late_snaps'] / snap_surge['full_snaps']
+    snap_surge = snap_surge.rename(columns={'gsis_id': 'player_id'})
+
+    df = df.merge(target_surge[['player_id', 'season', 'late_target_pct']], on=['player_id', 'season'], how='left')
+    df = df.merge(snap_surge[['player_id', 'season', 'late_snap_pct']], on=['player_id', 'season'], how='left')
+    df[['late_target_pct', 'late_snap_pct']] = df[['late_target_pct', 'late_snap_pct']].fillna(0.35)
+    return df
+
 def compute_deltas(df, delta_df):
     for col in DELTA_SHIFT_COLS:
         df[f"{col}_delta"] = df[col] - delta_df[col]
@@ -140,7 +192,7 @@ def compute_deltas(df, delta_df):
     df[delta_cols] = df[DELTA_SHIFT_COLS].fillna(0)
     return df
  
-    
+
     
 def remove_cols(df):
     DROP_COLS = [
@@ -186,6 +238,7 @@ def build_features(df):
     df = add_per_game(df)
     df = add_eras(df)
     df = convert_categoricals(df)
+    df = add_surge_features(df)
     df, delta_df = add_lag(df)
     df = compute_deltas(df, delta_df)
     df = remove_cols(df)
