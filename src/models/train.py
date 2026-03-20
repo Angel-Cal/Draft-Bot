@@ -115,12 +115,8 @@ class Model:
         x_test = x_test.drop(columns = drop_cols)
         x_val = x_val.drop(columns = drop_cols)
         return x_train, x_test, x_val
-
-if __name__ == "__main__":
-    filepath = Path(__file__).parent.parent.parent / "data" / "processed"/ 'processed_data.parquet'
-
-    df = pd.read_parquet(filepath)
-    model = Model()
+    
+def print_baseline(df, model):
     x_train, x_val, x_test, y_train, y_val, y_test = model.temporal_splits(df)
     x_train_org = x_train
     x_val_org = x_val
@@ -130,6 +126,7 @@ if __name__ == "__main__":
     mae, r2, rmse = model.evaluate_model(trained_model, x_test, y_test)
     print("Baseline:\nMAE: ", mae, "R2: ", r2, "RMSE: ", rmse, "\n")
 
+def print_rolling_splits(df, model):
     df_list = model.rolling_splits(df)
     metrics_list = model.walk_forward(df_list)
     counter =1
@@ -137,6 +134,91 @@ if __name__ == "__main__":
         mae, r2, rmse = metrics
         print("Fold ", counter, "metrics\nMAE: ", mae, "R2: ", r2, "RMSE: ", rmse )
         counter+=1
+
+    avg_mae = np.mean([m[0] for m in metrics_list])
+    avg_r2 = np.mean([m[1] for m in metrics_list])
+    avg_rmse = np.mean([m[2] for m in metrics_list])
+    print("Walk-Forward Averages:\nMAE: ", avg_mae, "R2: ", avg_r2, "RMSE: ", avg_rmse)
+
+if __name__ == "__main__":
+    filepath = Path(__file__).parent.parent.parent / "data" / "processed"/ 'processed_data.parquet'
+    QB_DROP_COLS = [
+        "targets", "receiving_epa",
+        "target_share", "air_yards_share", "wopr_x", "dom", "w8dom",
+        "targets_pg", "receptions_pg", "receiving_yards_pg", "receiving_tds_pg",
+        "receiving_first_downs_pg",
+        "pacr", "racr", "yptmpa",
+        "late_target_pct", "late_snap_pct",
+        "targets_delta",
+        "targets_pg_delta", "receptions_pg_delta", "receiving_yards_pg_delta",
+        "receiving_tds_pg_delta", "receiving_first_downs_pg_delta",
+        "target_share_delta", "air_yards_share_delta",
+        "wopr_x_delta", "dom_delta", "w8dom_delta"
+    ]
+
+    RB_DROP_COLS = [
+        "attempts", "passing_epa",
+        "completions_pg", "attempts_pg", "passing_yards_pg",
+        "passing_tds_pg", "interceptions_pg", "sacks_pg",
+        "passing_first_downs_pg",
+        "dakota",
+        "pacr", "racr", "yptmpa",
+        "air_yards_share", "wopr_x",
+        "dom", "w8dom",
+        "late_target_pct",
+        "attempts_delta",
+        "completions_pg_delta", "attempts_pg_delta",
+        "passing_yards_pg_delta", "passing_tds_pg_delta",
+        "interceptions_pg_delta", "sacks_pg_delta",
+        "passing_first_downs_pg_delta",
+        "air_yards_share_delta", "wopr_x_delta",
+        "dom_delta", "w8dom_delta"
+    ]
+
+    WR_DROP_COLS = [
+        "attempts", "passing_epa",
+        "completions_pg", "attempts_pg", "passing_yards_pg",
+        "passing_tds_pg", "interceptions_pg", "sacks_pg",
+        "passing_first_downs_pg",
+        "dakota",
+        "carries", "rushing_epa",
+        "carries_pg", "rushing_yards_pg", "rushing_tds_pg",
+        "rushing_first_downs_pg",
+        "carries_delta", "carries_pg_delta",
+        "rushing_yards_pg_delta", "rushing_tds_pg_delta",
+        "rushing_first_downs_pg_delta",
+        "attempts_delta",
+        "completions_pg_delta", "attempts_pg_delta",
+        "passing_yards_pg_delta", "passing_tds_pg_delta",
+        "interceptions_pg_delta", "sacks_pg_delta",
+        "passing_first_downs_pg_delta"
+    ]
+
+    df = pd.read_parquet(filepath)
+
+    qb_df = df[df["position"] == "QB"] 
+    qb_df = qb_df.drop(columns=QB_DROP_COLS)
+
+    rb_df = df[df["position"] == "RB"]
+    rb_df = rb_df.drop(columns=RB_DROP_COLS)
+
+    wr_df = df[df["position"] == "WR"]
+    wr_df = wr_df.drop(columns=WR_DROP_COLS)
+
+    te_df = df[df["position"] == "TE"]
+    te_df = te_df.drop(columns=WR_DROP_COLS)
+
+    model = Model()
+    # print_rolling_splits(qb_df, model)
+    # print_rolling_splits(rb_df, model)
+    # print_rolling_splits(wr_df, model)
+    print_rolling_splits(te_df, model)
+    
+
+
+   
+
+
 
     # # Ablate Deltas
     # x_train, x_test, x_val = model.ablate(x_train_org, x_test_org, x_val_org, exclude_patterns=['_delta'])
