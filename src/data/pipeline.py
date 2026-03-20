@@ -1,4 +1,5 @@
 import pandas as pd
+import nfl_data_py as nfl
 from pathlib import Path
 import numpy as np
 import sys
@@ -58,7 +59,7 @@ def clean_data(roster, season):
         "fantasy_points", "fantasy_points_ppr", "ppr_sh"
     ]
 
-    filtered_roster = roster[roster["position"].isin(["QB", "RB", "WR", "TE"])] # Only Keep relevant positions
+    filtered_roster = roster[roster["position"].isin(["QB", "RB", "WR", "TE"])] 
     season_filtered = season[SEASON_KEEP_COLS]
     end_roster = (
         filtered_roster[ROSTER_KEEP_COLS + ["week"]]
@@ -71,17 +72,32 @@ def clean_data(roster, season):
 
 
     merged_df = season_filtered.merge(end_roster, on=["player_id", "season"], how = "inner")
-    merged_df = merged_df[merged_df['games'] >= 4]  # Filter out low usage players (noise)
+    merged_df = merged_df[merged_df['games'] >= 4]  
     merged_df['draft_number'] = merged_df['draft_number'].replace(['nan', 'None'], '300').astype(float)
-
+    totals_df = load_totals()
+    merged_df = merged_df.merge(totals_df, on =['team', 'season'])
 
     return merged_df
-
-
 
 def save_data(df):
     filepath = PROCESSED_DIR / 'processed_data.parquet'
     df.to_parquet(filepath)
+
+def load_totals():
+    schedules = nfl.import_schedules(list(range(2015, 2025)))
+    schedules = schedules[schedules['game_type'] == 'REG']
+    schedules['home_implied_total'] = (schedules['total_line'] / 2 + schedules['spread_line'] / 2)
+    schedules['away_implied_total'] = (schedules['total_line']/2 - schedules['spread_line']/2)
+
+    home_df = schedules[['home_team', 'season', 'home_implied_total']].copy()
+    home_df = home_df.rename(columns= {'home_team' : 'team', 'home_implied_total' : "implied_total"})
+
+    away_df = schedules[['away_team', 'season', 'away_implied_total']].copy()
+    away_df = away_df.rename(columns= {'away_team' : 'team', 'away_implied_total' : "implied_total"})
+
+    totals_df = pd.concat([home_df, away_df]).groupby(['team', 'season']).mean().reset_index()
+    return totals_df
+
 
 if __name__ == "__main__":
     seasonal, roster = load_data()

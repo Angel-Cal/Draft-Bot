@@ -209,9 +209,9 @@ if __name__ == "__main__":
     te_df = te_df.drop(columns=WR_DROP_COLS)
 
     model = Model()
-    # print_rolling_splits(qb_df, model)
-    # print_rolling_splits(rb_df, model)
-    # print_rolling_splits(wr_df, model)
+    print_rolling_splits(qb_df, model)
+    print_rolling_splits(rb_df, model)
+    print_rolling_splits(wr_df, model)
     print_rolling_splits(te_df, model)
     
 
