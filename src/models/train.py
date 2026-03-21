@@ -5,6 +5,7 @@ from lightgbm import LGBMRegressor
 import sklearn.metrics as lk
 from pathlib import Path
 import matplotlib.pyplot as plt
+import optuna 
 
 
 
@@ -50,40 +51,22 @@ class Model:
             x_test = df[df["season"] == test_season]
             y_test = x_test["target_ppr"]
             x_test = x_test.drop(columns = ["target_ppr", "season"])
-            
+
             df_list.append((x_train, x_val, x_test, y_train, y_val, y_test)) 
         return df_list
     
-    def walk_forward(self, df_list):
+    def walk_forward(self, df_list, params):
         metrics_list = []
         for fold in df_list:
            x_train, x_val, x_test, y_train, y_val, y_test = fold
-           trained_model= self.train_model(x_train, x_val, y_train, y_val)
+           trained_model= self.train_model(x_train, x_val, y_train, y_val, params)
            mae, r2, rmse = self.evaluate_model(trained_model, x_test, y_test)
            metrics_list.append((mae, r2, rmse))
         return metrics_list
             
-
-
-
-    def train_model(self, x_train, x_val, y_train, y_val):
-        model = lgb.LGBMRegressor(
-            n_estimators=1000,
-            learning_rate=0.03,
-            num_leaves=31,
-            max_depth=-1,
-            min_child_samples=30,
-            min_child_weight=1e-3,
-            reg_alpha=.1,
-            reg_lambda=1.0,
-            subsample=.8,
-            subsample_freq=1,
-            colsample_bytree=.8,
-            random_state=42,
-            verbosity=-1,
-            objective="regression",
-            n_jobs=-1
-        )
+    def train_model(self, x_train, x_val, y_train, y_val, params):
+        model = lgb.LGBMRegressor(**params)
+        
         model.fit(
             x_train,
             y_train,
@@ -116,19 +99,69 @@ class Model:
         x_val = x_val.drop(columns = drop_cols)
         return x_train, x_test, x_val
     
-def print_baseline(df, model):
-    x_train, x_val, x_test, y_train, y_val, y_test = model.temporal_splits(df)
-    x_train_org = x_train
-    x_val_org = x_val
-    x_test_org = x_test
-    positions = x_test["position"]
-    trained_model = model.train_model(x_train, x_val, y_train, y_val)
-    mae, r2, rmse = model.evaluate_model(trained_model, x_test, y_test)
-    print("Baseline:\nMAE: ", mae, "R2: ", r2, "RMSE: ", rmse, "\n")
+    def objective(self, trial, df):
+        params = {
+            "num_leaves" : trial.suggest_int("num_leaves", 20, 200),
+            "learning_rate" : trial.suggest_float("learning_rate", .01, .3, log = True),
+            "min_child_samples" : trial.suggest_int("min_child_samples", 10, 100),
+            "reg_alpha" : trial.suggest_float("reg_alpha", 1e-4, 10, log =True),
+            "reg_lambda" : trial.suggest_float("reg_lambda", 1e-4, 10, log=True),
+            "subsample" : trial.suggest_float("subsample", .5, 1.0),
+            "colsample_bytree" : trial.suggest_float("colsample_bytree", .5, 1.0),
+            "max_depth" : trial.suggest_int("max_depth", 3, 12),
+            "n_estimators" : 1000,
+            "verbosity" : -1,
+            "objective" : "regression",
+            "n_jobs" : -1,
+            "random_state" : 42,
+            "subsample_freq" : 1,
+            "min_child_weight" : 1e-3
+        }
+        folds = self.rolling_splits(df)
+        rmse_scores = []
+        for fold in folds:
+            x_train, x_val, x_test, y_train, y_val, y_test = fold
+            model = lgb.LGBMRegressor(**params)
+            model.fit(
+                x_train,
+                y_train,
+                eval_set=[(x_val, y_val)],
+                eval_metric="rmse",
+                callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)]
+            )
+            _, _, rmse = self.evaluate_model(model, x_test, y_test)
+            rmse_scores.append(rmse)
+        return float(np.mean(rmse_scores))
 
-def print_rolling_splits(df, model):
+    def tune(self, df):
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+        study = optuna.create_study(direction="minimize")
+        study.optimize(lambda trial: self.objective(trial, df), n_trials=100)
+        best_params = study.best_params
+        best_params.update({
+            "n_estimators": 1000,
+            "verbosity": -1,
+            "objective": "regression",
+            "n_jobs": -1,
+            "random_state": 42,
+            "subsample_freq": 1,
+            "min_child_weight": 1e-3
+        })
+        return best_params
+
+# def print_baseline(df, model):
+#     x_train, x_val, x_test, y_train, y_val, y_test = model.temporal_splits(df)
+#     x_train_org = x_train
+#     x_val_org = x_val
+#     x_test_org = x_test
+#     positions = x_test["position"]
+#     trained_model = model.train_model(x_train, x_val, y_train, y_val)
+#     mae, r2, rmse = model.evaluate_model(trained_model, x_test, y_test)
+#     print("Baseline:\nMAE: ", mae, "R2: ", r2, "RMSE: ", rmse, "\n")
+
+def print_rolling_splits(df, model, params):
     df_list = model.rolling_splits(df)
-    metrics_list = model.walk_forward(df_list)
+    metrics_list = model.walk_forward(df_list, params)
     counter =1
     for metrics in metrics_list:
         mae, r2, rmse = metrics
@@ -140,8 +173,7 @@ def print_rolling_splits(df, model):
     avg_rmse = np.mean([m[2] for m in metrics_list])
     print("Walk-Forward Averages:\nMAE: ", avg_mae, "R2: ", avg_r2, "RMSE: ", avg_rmse)
 
-if __name__ == "__main__":
-    filepath = Path(__file__).parent.parent.parent / "data" / "processed"/ 'processed_data.parquet'
+def split_positions(df):
     QB_DROP_COLS = [
         "targets", "receiving_epa",
         "target_share", "air_yards_share", "wopr_x", "dom", "w8dom",
@@ -193,24 +225,55 @@ if __name__ == "__main__":
         "interceptions_pg_delta", "sacks_pg_delta",
         "passing_first_downs_pg_delta"
     ]
-
-    df = pd.read_parquet(filepath)
-
+    
     qb_df = df[df["position"] == "QB"] 
     qb_df = qb_df.drop(columns=QB_DROP_COLS)
 
     rb_df = df[df["position"] == "RB"]
     rb_df = rb_df.drop(columns=RB_DROP_COLS)
 
-    # wr_df = df[df["position"] == "WR"]
-    # wr_df = wr_df.drop(columns=WR_DROP_COLS)
+    wr_df = df[df["position"] == "WR"]
+    wr_df = wr_df.drop(columns=WR_DROP_COLS)
 
-    # te_df = df[df["position"] == "TE"]
-    # te_df = te_df.drop(columns=WR_DROP_COLS)
+    te_df = df[df["position"] == "TE"]
+    te_df = te_df.drop(columns=WR_DROP_COLS)
+
+    return qb_df, rb_df, wr_df, te_df
+
+
+if __name__ == "__main__":
+    import sys
+    sys.stdout = open("output.log", "w")
+    filepath = Path(__file__).parent.parent.parent / "data" / "processed"/ 'processed_data.parquet'
+    df = pd.read_parquet(filepath)
+    qb_df, rb_df, wr_df, te_df = split_positions(df)
 
     model = Model()
-    print_rolling_splits(qb_df, model)
-    print_rolling_splits(rb_df, model)
+    qb_x_train, qb_x_val, qb_x_test, qb_y_train, qb_y_val, qb_y_test = model.temporal_splits(qb_df)
+    rb_x_train, rb_x_val, rb_x_test, rb_y_train, rb_y_val, rb_y_test = model.temporal_splits(rb_df)
+    wr_x_train, wr_x_val, wr_x_test, wr_y_train, wr_y_val, wr_y_test = model.temporal_splits(wr_df)
+    te_x_train, te_x_val, te_x_test, te_y_train, te_y_val, te_y_test = model.temporal_splits(te_df)
+
+    qb_params = model.tune(qb_df)
+    rb_params = model.tune(rb_df)
+    wr_params = model.tune(wr_df)
+    te_params = model.tune(te_df)
+
+    print_rolling_splits(qb_df, model, qb_params)
+    print_rolling_splits(rb_df, model, rb_params)
+    print_rolling_splits(wr_df, model, wr_params)
+    print_rolling_splits(te_df, model, te_params)
+
+    sys.stdout.close()
+    sys.stdout = sys.__stdout__
+
+
+
+
+
+
+    # print_rolling_splits(qb_df, model)
+    # print_rolling_splits(rb_df, model)
     # print_rolling_splits(wr_df, model)
     # print_rolling_splits(te_df, model)
     
