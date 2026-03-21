@@ -202,17 +202,17 @@ if __name__ == "__main__":
     rb_df = df[df["position"] == "RB"]
     rb_df = rb_df.drop(columns=RB_DROP_COLS)
 
-    wr_df = df[df["position"] == "WR"]
-    wr_df = wr_df.drop(columns=WR_DROP_COLS)
+    # wr_df = df[df["position"] == "WR"]
+    # wr_df = wr_df.drop(columns=WR_DROP_COLS)
 
-    te_df = df[df["position"] == "TE"]
-    te_df = te_df.drop(columns=WR_DROP_COLS)
+    # te_df = df[df["position"] == "TE"]
+    # te_df = te_df.drop(columns=WR_DROP_COLS)
 
     model = Model()
     print_rolling_splits(qb_df, model)
     print_rolling_splits(rb_df, model)
-    print_rolling_splits(wr_df, model)
-    print_rolling_splits(te_df, model)
+    # print_rolling_splits(wr_df, model)
+    # print_rolling_splits(te_df, model)
     
 
 

@@ -32,8 +32,8 @@ DELTA_SHIFT_COLS = [
         "air_yards_share",
         "wopr_x",
         "dom",
-        "w8dom" 
-    ]    
+        "w8dom",
+    ]
 
 
 def add_per_game(df):
@@ -127,11 +127,7 @@ def add_lag(df):
     df = df.dropna(subset=LAG_COLS)
     return df, delta_df
 
-def add_surge_features(df):
-    snaps = pd.read_parquet(RAW_DIR/'snap_counts_20_25.parquet')
-    id = pd.read_parquet(RAW_DIR/'ids.parquet')
-    pbp = pd.read_parquet(RAW_DIR/'pbp_20_25.parquet')
-
+def add_surge_features(df, pbp, id, snaps):
     # Compute target pct
     pass_plays = pbp[pbp['receiver_player_id'].notna()]
     full_targets = (pass_plays
@@ -179,7 +175,7 @@ def compute_deltas(df, delta_df):
     return df
  
 
-    
+
 def remove_cols(df):
     DROP_COLS = [
         # Passing outcomes
@@ -218,11 +214,11 @@ def convert_categoricals(df):
     return df
 
 
-def build_features(df):
+def build_features(df, pbp, id, snaps):
     df = df.sort_values(['player_id', 'season'])
     df = add_per_game(df)
     df = convert_categoricals(df)
-    df = add_surge_features(df)
+    df = add_surge_features(df, pbp, id, snaps)
     df, delta_df = add_lag(df)
     df = compute_deltas(df, delta_df)
     df = remove_cols(df)

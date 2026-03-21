@@ -12,11 +12,12 @@ PROCESSED_DIR = Path(__file__).parent.parent.parent / "data" / "processed"
 
 def load_data():
     seasonal = pd.read_parquet(RAW_DIR /'seasonal_20_25.parquet')
-    # pbp = pd.read_parquet('../data/raw/pbp_20_25.parquet')
+    pbp = pd.read_parquet(RAW_DIR/'pbp_20_25.parquet')
     roster = pd.read_parquet(RAW_DIR /'seasonal_roster_20_25.parquet')
-    # id = pd.read_parquet('../data/raw/ids.parquet')
+    id = pd.read_parquet(RAW_DIR/'ids.parquet')
+    snaps = pd.read_parquet(RAW_DIR/'snap_counts_20_25.parquet')
 
-    return seasonal, roster
+    return seasonal, roster, pbp, id, snaps
 
 def clean_data(roster, season):
     ROSTER_KEEP_COLS = [
@@ -100,9 +101,9 @@ def load_totals():
 
 
 if __name__ == "__main__":
-    seasonal, roster = load_data()
+    seasonal, roster, pbp, id, snaps = load_data()
     df = clean_data(roster, seasonal)
-    df = build_features(df)
+    df = build_features(df, pbp, id, snaps)
     save_data(df)
     print(f"Saved {len(df)} rows to {PROCESSED_DIR}")
 
