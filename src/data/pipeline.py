@@ -1,5 +1,5 @@
 import pandas as pd
-import nfl_data_py as nfl
+import nflreadpy as nflread
 from pathlib import Path
 import numpy as np
 import sys
@@ -21,11 +21,11 @@ def load_data():
 
 def clean_data(roster, season):
     ROSTER_KEEP_COLS = [
-        "player_id",
+        "gsis_id",
         "season",
         "team",
         "position",
-        "age",
+        "birth_date",
         "height",
         "weight",
         "years_exp",
@@ -40,7 +40,8 @@ def clean_data(roster, season):
 
         # Passing
         "completions", "attempts", "passing_yards", "passing_tds",
-        "interceptions", "sacks", "passing_first_downs", "passing_epa",
+        "passing_interceptions", "sacks_suffered", "passing_first_downs", "passing_epa",
+        "passing_cpoe", "passing_air_yards",
 
         # Rushing
         "carries", "rushing_yards", "rushing_tds",
@@ -49,15 +50,16 @@ def clean_data(roster, season):
         # Receiving
         "targets", "receptions", "receiving_yards", "receiving_tds",
         "receiving_first_downs", "receiving_epa",
+        "receiving_air_yards", "receiving_yards_after_catch",
 
         # Efficiency
-        "pacr", "racr", "dakota", "yptmpa",
+        "pacr", "racr",
 
         # Opportunity / role
-        "target_share", "air_yards_share", "wopr_x", "dom", "w8dom",
+        "target_share", "air_yards_share", "wopr",
 
         # Fantasy outputs
-        "fantasy_points", "fantasy_points_ppr", "ppr_sh"
+        "fantasy_points", "fantasy_points_ppr"
     ]
 
     filtered_roster = roster[roster["position"].isin(["QB", "RB", "WR", "TE"])] 
@@ -65,18 +67,27 @@ def clean_data(roster, season):
     end_roster = (
         filtered_roster[ROSTER_KEEP_COLS + ["week"]]
         .sort_values(["season", "week"])
-        .groupby(["player_id", "season"], as_index=False)
+        .groupby(["gsis_id", "season"], as_index=False)
         .last()
         .drop(columns=["week"], errors="ignore")
+        .rename(columns={"gsis_id": "player_id"})
         )
+    end_roster["age"] = end_roster.apply(
+        lambda row: (pd.Timestamp(f"{row['season']}-09-01") - pd.Timestamp(row["birth_date"])).days // 365, axis=1
+    )
+    end_roster = end_roster.drop(columns=["birth_date"])
     assert end_roster.groupby(["player_id", "season"]).size().max() == 1
 
 
     merged_df = season_filtered.merge(end_roster, on=["player_id", "season"], how = "inner")
-    merged_df = merged_df[merged_df['games'] >= 4]  
+    print(f"After roster merge: {len(merged_df)}")
+    merged_df = merged_df[merged_df['games'] >= 4]
+    print(f"After games filter: {len(merged_df)}")
     merged_df['draft_number'] = merged_df['draft_number'].replace(['nan', 'None'], '300').astype(float)
     totals_df = load_totals()
     merged_df = merged_df.merge(totals_df, on =['team', 'season'])
+    print(f"After totals merge: {len(merged_df)}")
+
 
     return merged_df
 
@@ -85,7 +96,7 @@ def save_data(df):
     df.to_parquet(filepath)
 
 def load_totals():
-    schedules = nfl.import_schedules(list(range(2015, 2025)))
+    schedules = nflread.load_schedules(list(range(2015, 2026))).to_pandas()
     schedules = schedules[schedules['game_type'] == 'REG']
     schedules['home_implied_total'] = (schedules['total_line'] / 2 + schedules['spread_line'] / 2)
     schedules['away_implied_total'] = (schedules['total_line']/2 - schedules['spread_line']/2)
@@ -107,7 +118,7 @@ if __name__ == "__main__":
     save_data(df)
     print(f"Saved {len(df)} rows to {PROCESSED_DIR}")
 
-    
+
 
 
 

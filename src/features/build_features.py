@@ -16,8 +16,8 @@ DELTA_SHIFT_COLS = [
         "attempts_pg",
         "passing_yards_pg",
         "passing_tds_pg",
-        "interceptions_pg",
-        "sacks_pg",
+        "passing_interceptions_pg",
+        "sacks_suffered_pg",
         "passing_first_downs_pg",    
         "carries_pg",
         "rushing_yards_pg",
@@ -30,9 +30,11 @@ DELTA_SHIFT_COLS = [
         "receiving_first_downs_pg",
         "target_share",
         "air_yards_share",
-        "wopr_x",
-        "dom",
-        "w8dom",
+        "wopr",
+        "passing_cpoe",
+        "passing_air_yards_pg",
+        "receiving_air_yards_pg",
+        "receiving_yards_after_catch_pg",
     ]
 
 
@@ -43,8 +45,8 @@ def add_per_game(df):
     "attempts",
     "passing_yards",
     "passing_tds",
-    "interceptions",
-    "sacks",
+    "passing_interceptions",
+    "sacks_suffered",
     "passing_first_downs",
 
     # Rushing volume
@@ -59,6 +61,11 @@ def add_per_game(df):
     "receiving_yards",
     "receiving_tds",
     "receiving_first_downs",
+    "receiving_air_yards",
+    "receiving_yards_after_catch",
+
+    # Passing volume
+    "passing_air_yards",
 ]
 
     for col in PER_GAME_COLS:
@@ -80,8 +87,8 @@ def add_lag(df):
     "attempts_pg",
     "passing_yards_pg",
     "passing_tds_pg",
-    "interceptions_pg",
-    "sacks_pg",
+    "passing_interceptions_pg",
+    "sacks_suffered_pg",
     "passing_first_downs_pg",
 
     "carries_pg",
@@ -101,30 +108,42 @@ def add_lag(df):
     "receiving_epa",
     "pacr",
     "racr",
-    "dakota",
-    "yptmpa",
+    "passing_cpoe",
+
+    # Air yards & YAC per game
+    "passing_air_yards_pg",
+    "receiving_air_yards_pg",
+    "receiving_yards_after_catch_pg",
+
 
     # Opportunity / role shares
     "target_share",
     "air_yards_share",
-    "wopr_x",
-    "dom",
-    "w8dom",
+    "wopr",
+
 
     # Prior fantasy output (RAW totals)
     "fantasy_points",
     "fantasy_points_ppr",
-    "ppr_sh",
 
     "late_target_pct",
     "late_snap_pct"
 ]
     
+    REQUIRED_LAG_COLS = [
+        "games", "attempts", "carries", "targets",
+        "carries_pg", "rushing_yards_pg", "rushing_tds_pg", "rushing_first_downs_pg",
+        "targets_pg", "receptions_pg", "receiving_yards_pg", "receiving_tds_pg",
+        "receiving_first_downs_pg",
+        "fantasy_points", "fantasy_points_ppr",
+        "late_target_pct", "late_snap_pct"
+    ]
+
     df["target_ppr"] = df["fantasy_points_ppr"]
     delta_df = df.copy()
     delta_df[DELTA_SHIFT_COLS] = (df.groupby("player_id")[DELTA_SHIFT_COLS].shift(2))
     df[LAG_COLS] = (df.groupby("player_id")[LAG_COLS].shift(1))
-    df = df.dropna(subset=LAG_COLS)
+    df = df.dropna(subset=REQUIRED_LAG_COLS)
     return df, delta_df
 
 def add_surge_features(df, pbp, id, snaps):
@@ -181,8 +200,8 @@ def remove_cols(df):
         # Passing outcomes
         "passing_yards",
         "passing_tds",
-        "interceptions",
-        "sacks",
+        "passing_interceptions",
+        "sacks_suffered",
         "passing_first_downs",
 
         # Rushing outcomes
@@ -195,6 +214,9 @@ def remove_cols(df):
         "receiving_tds",
         "receiving_first_downs",
         "receptions",
+        "receiving_air_yards",
+        "receiving_yards_after_catch",
+        "passing_air_yards",
 
         # General outcome totals
         "completions",

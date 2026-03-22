@@ -6,6 +6,9 @@ import sklearn.metrics as lk
 from pathlib import Path
 import matplotlib.pyplot as plt
 import optuna 
+import sys
+import json
+
 
 
 
@@ -33,7 +36,7 @@ class Model:
         
     def rolling_splits(self, df, min_train_seasons=6, offset=1):
         FIRST_SEASON = 2015
-        LAST_SEASON = 2024
+        LAST_SEASON = 2025
         df_list =[]
         first_test = FIRST_SEASON + min_train_seasons
         for test_season in range(first_test, LAST_SEASON + 1):
@@ -133,7 +136,7 @@ class Model:
             rmse_scores.append(rmse)
         return float(np.mean(rmse_scores))
 
-    def tune(self, df):
+    def tune(self, df, position):
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         study = optuna.create_study(direction="minimize")
         study.optimize(lambda trial: self.objective(trial, df), n_trials=100)
@@ -147,7 +150,13 @@ class Model:
             "subsample_freq": 1,
             "min_child_weight": 1e-3
         })
+        output_dir = Path(__file__).parent.parent.parent / "models"
+        filename = f"{position}_params"
+        filepath = output_dir/filename
+        with open(filepath, "w") as f:
+            json.dump(best_params, f)
         return best_params
+        
 
 # def print_baseline(df, model):
 #     x_train, x_val, x_test, y_train, y_val, y_test = model.temporal_splits(df)
@@ -176,43 +185,41 @@ def print_rolling_splits(df, model, params):
 def split_positions(df):
     QB_DROP_COLS = [
         "targets", "receiving_epa",
-        "target_share", "air_yards_share", "wopr_x", "dom", "w8dom",
+        "target_share", "air_yards_share", "wopr",
         "targets_pg", "receptions_pg", "receiving_yards_pg", "receiving_tds_pg",
-        "receiving_first_downs_pg",
-        "pacr", "racr", "yptmpa",
+        "receiving_first_downs_pg", "receiving_air_yards_pg", "receiving_yards_after_catch_pg",
+        "pacr", "racr",
         "late_target_pct", "late_snap_pct",
         "targets_delta",
         "targets_pg_delta", "receptions_pg_delta", "receiving_yards_pg_delta",
         "receiving_tds_pg_delta", "receiving_first_downs_pg_delta",
-        "target_share_delta", "air_yards_share_delta",
-        "wopr_x_delta", "dom_delta", "w8dom_delta"
+        "receiving_air_yards_pg_delta", "receiving_yards_after_catch_pg_delta",
+        "target_share_delta", "air_yards_share_delta", "wopr_delta",
     ]
 
     RB_DROP_COLS = [
         "attempts", "passing_epa",
         "completions_pg", "attempts_pg", "passing_yards_pg",
-        "passing_tds_pg", "interceptions_pg", "sacks_pg",
-        "passing_first_downs_pg",
-        "dakota",
-        "pacr", "racr", "yptmpa",
-        "air_yards_share", "wopr_x",
-        "dom", "w8dom",
+        "passing_tds_pg", "passing_interceptions_pg", "sacks_suffered_pg",
+        "passing_first_downs_pg", "passing_cpoe", "passing_air_yards_pg",
+        "pacr", "racr",
+        "air_yards_share", "wopr",
+        "receiving_air_yards_pg",
         "late_target_pct",
         "attempts_delta",
         "completions_pg_delta", "attempts_pg_delta",
         "passing_yards_pg_delta", "passing_tds_pg_delta",
-        "interceptions_pg_delta", "sacks_pg_delta",
-        "passing_first_downs_pg_delta",
-        "air_yards_share_delta", "wopr_x_delta",
-        "dom_delta", "w8dom_delta"
+        "passing_interceptions_pg_delta", "sacks_suffered_pg_delta",
+        "passing_first_downs_pg_delta", "passing_air_yards_pg_delta",
+        "air_yards_share_delta", "wopr_delta",
+        "receiving_air_yards_pg_delta",
     ]
 
     WR_DROP_COLS = [
         "attempts", "passing_epa",
         "completions_pg", "attempts_pg", "passing_yards_pg",
-        "passing_tds_pg", "interceptions_pg", "sacks_pg",
-        "passing_first_downs_pg",
-        "dakota",
+        "passing_tds_pg", "passing_interceptions_pg", "sacks_suffered_pg",
+        "passing_first_downs_pg", "passing_cpoe", "passing_air_yards_pg",
         "carries", "rushing_epa",
         "carries_pg", "rushing_yards_pg", "rushing_tds_pg",
         "rushing_first_downs_pg",
@@ -222,8 +229,8 @@ def split_positions(df):
         "attempts_delta",
         "completions_pg_delta", "attempts_pg_delta",
         "passing_yards_pg_delta", "passing_tds_pg_delta",
-        "interceptions_pg_delta", "sacks_pg_delta",
-        "passing_first_downs_pg_delta"
+        "passing_interceptions_pg_delta", "sacks_suffered_pg_delta",
+        "passing_first_downs_pg_delta", "passing_air_yards_pg_delta",
     ]
     
     qb_df = df[df["position"] == "QB"] 
@@ -242,7 +249,6 @@ def split_positions(df):
 
 
 if __name__ == "__main__":
-    import sys
     sys.stdout = open("output.log", "w")
     filepath = Path(__file__).parent.parent.parent / "data" / "processed"/ 'processed_data.parquet'
     df = pd.read_parquet(filepath)
@@ -254,10 +260,10 @@ if __name__ == "__main__":
     wr_x_train, wr_x_val, wr_x_test, wr_y_train, wr_y_val, wr_y_test = model.temporal_splits(wr_df)
     te_x_train, te_x_val, te_x_test, te_y_train, te_y_val, te_y_test = model.temporal_splits(te_df)
 
-    qb_params = model.tune(qb_df)
-    rb_params = model.tune(rb_df)
-    wr_params = model.tune(wr_df)
-    te_params = model.tune(te_df)
+    qb_params = model.tune(qb_df, "qb")
+    rb_params = model.tune(rb_df, "rb")
+    wr_params = model.tune(wr_df, "wr")
+    te_params = model.tune(te_df, "te")
 
     print_rolling_splits(qb_df, model, qb_params)
     print_rolling_splits(rb_df, model, rb_params)
