@@ -13,7 +13,7 @@ import json
 
 
 class Model:
-    def __init__(self, train_range = (range(2015, 2023)), val_season = 2023, test_season = 2024):
+    def __init__(self, train_range = (range(2015, 2024)), val_season = 2024, test_season = 2025):
         self.train_range = train_range
         self.val_season = val_season
         self.test_season = test_season
@@ -77,6 +77,11 @@ class Model:
             eval_metric="rmse",
             callbacks=[lgb.early_stopping(50), lgb.log_evaluation(50)]
         )
+        return model
+    
+    def train_final_model(self, x_train, y_train, params):
+        model = lgb.LGBMRegressor(**params)
+        model.fit(x_train, y_train)
         return model
 
     def evaluate_model(self, model, x_test, y_test):
@@ -250,7 +255,7 @@ def split_positions(df):
 
 if __name__ == "__main__":
     sys.stdout = open("output.log", "w")
-    filepath = Path(__file__).parent.parent.parent / "data" / "processed"/ 'processed_data.parquet'
+    filepath = Path(__file__).parent.parent.parent / "data" / "processed"/ 'training_data.parquet'
     df = pd.read_parquet(filepath)
     qb_df, rb_df, wr_df, te_df = split_positions(df)
 

@@ -226,7 +226,6 @@ def remove_cols(df):
         "college",
         "draft_club",
         "season_type",
-        "player_id"
     ]
     df = df.drop(columns = DROP_COLS)
     return df
@@ -235,6 +234,7 @@ def convert_categoricals(df):
     df['position'] = df['position'].astype('category')
     return df
 
+    
 
 def build_features(df, pbp, id, snaps):
     df = df.sort_values(['player_id', 'season'])
@@ -244,4 +244,22 @@ def build_features(df, pbp, id, snaps):
     df, delta_df = add_lag(df)
     df = compute_deltas(df, delta_df)
     df = remove_cols(df)
+    df = df.drop(columns=['player_id', 'player_name'])
     return df
+
+def build_prediction_features(df, pbp, id, snaps):
+    df_recent = df[df['season'].isin([2024, 2025])].copy()
+    df_recent = df_recent.sort_values(['player_id', 'season'])
+    df_recent = add_per_game(df_recent)
+    df_recent = convert_categoricals(df_recent)
+
+    delta_df = df_recent.copy()
+    delta_df[DELTA_SHIFT_COLS] = df_recent.groupby('player_id')[DELTA_SHIFT_COLS].shift(1)
+
+    df_2025 = df_recent[df_recent['season'] == 2025].copy()
+    delta_df_2025 = delta_df[delta_df['season'] == 2025].copy()
+
+    df_2025 = add_surge_features(df_2025, pbp, id, snaps)
+    df_2025 = compute_deltas(df_2025, delta_df_2025)
+    df_2025 = remove_cols(df_2025)
+    return df_2025

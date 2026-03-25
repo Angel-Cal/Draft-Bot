@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from src.features.build_features import build_features
+from src.features.build_features import build_features, build_prediction_features
 
 
 RAW_DIR = Path(__file__).parent.parent.parent / "data" / "raw"
@@ -36,7 +36,7 @@ def clean_data(roster, season):
     ]
     SEASON_KEEP_COLS = [
         # Keys
-        "player_id", "season", "season_type", "games",
+        "player_id", "season", "season_type", "games", "player_name",
 
         # Passing
         "completions", "attempts", "passing_yards", "passing_tds",
@@ -91,9 +91,14 @@ def clean_data(roster, season):
 
     return merged_df
 
-def save_data(df):
-    filepath = PROCESSED_DIR / 'processed_data.parquet'
+def save_data(df, file_name):
+    filepath = PROCESSED_DIR / f'{file_name}.parquet'
     df.to_parquet(filepath)
+
+def save_data_as_csv(df, file_name):
+    filepath = PROCESSED_DIR / f'{file_name}.csv'
+    df.to_csv(filepath, index='false')
+    
 
 def load_totals():
     schedules = nflread.load_schedules(list(range(2015, 2026))).to_pandas()
@@ -114,8 +119,11 @@ def load_totals():
 if __name__ == "__main__":
     seasonal, roster, pbp, id, snaps = load_data()
     df = clean_data(roster, seasonal)
+    prediction_df = build_prediction_features(df, pbp, id, snaps)
+
     df = build_features(df, pbp, id, snaps)
-    save_data(df)
+    save_data(df, "training_data")
+    save_data(prediction_df, "prediction_data")
     print(f"Saved {len(df)} rows to {PROCESSED_DIR}")
 
 
