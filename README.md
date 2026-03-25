@@ -1,151 +1,147 @@
 # Fantasy Football Draft Bot
 
-An ML-powered fantasy football draft assistant that recommends optimal picks based on player projections, value-based drafting, and roster construction strategies.
+An ML-powered fantasy football draft assistant that predicts player performance
+and provides real-time draft recommendations based on value-based drafting,
+positional scarcity, opponent roster tracking, and draft run detection.
 
-## Features
+## Project Status
 
-- **Player Projections**: Machine learning models trained on historical NFL data to predict fantasy performance
-- **Value-Based Drafting (VBD)**: Compare players across positions using value over replacement
-- **Draft Simulation**: Monte Carlo simulations to optimize draft strategy
-- **Interactive CLI**: Real-time draft assistance with smart recommendations
-- **Configurable Scoring**: Support for PPR, Half-PPR, and Standard leagues
+- **Projection models**: Complete — position-specific LightGBM models trained on
+  NFL data from 2015-2025
+- **Prediction pipeline**: Complete — generates 2026 season projections for all
+  active players
+- **Draft advisor**: In development
 
-## Quick Start
+## Model Performance (Walk-Forward Validation, 2015-2025)
 
-### Installation
+| Position | R²    | RMSE  |
+|----------|-------|-------|
+| QB       | 0.539 | 78.68 |
+| RB       | 0.543 | 62.10 |
+| WR       | 0.585 | 54.87 |
+| TE       | 0.591 | 39.25 |
 
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/DraftBot.git
-cd DraftBot
+## How It Works
 
-# Create virtual environment
-python -m venv venv
+### 1. Data Pipeline (`src/data/`)
 
-# Activate virtual environment
-# Windows:
-venv\Scripts\activate
-# macOS/Linux:
-source venv/bin/activate
+- Pulls historical NFL data (2015-2025) via nflreadpy: seasonal stats, play-by-play,
+  rosters, snap counts, player IDs
+- Cleans and merges datasets, derives age from birth date, computes Vegas implied
+  team totals as offensive context features
 
-# Install dependencies
-pip install -r requirements.txt
-```
+### 2. Feature Engineering (`src/features/build_features.py`)
 
-### Usage
+- Per-game volume stats (passing, rushing, receiving)
+- EPA and efficiency metrics (passing_cpoe, pacr, racr, wopr)
+- Air yards and yards after catch per game
+- Surge features: late-season target share and snap share trajectories
+- Year-over-year delta features to capture player trajectory
+- All features are lagged by one season to prevent data leakage
 
-```bash
-# 1. Collect historical NFL data
-python -m src.app.cli collect --seasons 2022 2023 2024
+### 3. Projection Models (`src/models/`)
 
-# 2. Process and clean the data
-python -m src.app.cli process
+- Separate LightGBM models per position (QB, RB, WR, TE)
+- Irrelevant features dropped per position (e.g. passing stats for WRs)
+- Walk-forward validation across 10 folds (2015-2025)
+- Hyperparameters tuned with Optuna (100 trials, Bayesian optimization)
+  using walk-forward RMSE as the objective
+- Final models trained on all historical data (2015-2025) for 2026 projections
 
-# 3. Train projection models
-python -m src.app.cli train
+### 4. Draft Advisor (`src/draft/`) — In Development
 
-# 4. View player rankings
-python -m src.app.cli rankings --top 20
-
-# 5. Start draft assistant
-python -m src.app.cli draft --pick 5 --teams 12
-```
+- Value Over Replacement (VOR) with FLEX-adjusted replacement levels
+- ADP integration: Sleeper API + Underdog CSV (via 4for4) averaged into
+  sharp consensus ADP
+- Ceiling/floor bands derived from position-level walk-forward RMSE
+- Adaptive risk profiling by round and roster composition
+- Positional run detection (continuous intensity, not boolean)
+- Opponent roster tracking across all 12 teams
+- Probabilistic position safety estimation
+- VOR tier detection with crossing-penalty
+- Additive weighted scoring model for final recommendations
 
 ## Project Structure
 
 ```
 DraftBot/
 ├── data/
-│   ├── raw/              # Original scraped data
-│   ├── processed/        # Cleaned/transformed data
-│   └── external/         # Third-party data sources
-├── notebooks/            # Jupyter notebooks for analysis
+│   ├── raw/                  # nflreadpy parquet files
+│   └── processed/            # Processed training data and projections
+├── models/                   # Saved tuned hyperparameters (JSON per position)
+├── notebooks/                # Exploratory data analysis
 ├── src/
-│   ├── data/            # Data collection and processing
-│   │   ├── scraper.py   # Web scraping utilities
-│   │   └── pipeline.py  # ETL pipeline
-│   ├── features/        # Feature engineering
-│   │   └── build_features.py
-│   ├── models/          # ML models
-│   │   ├── train.py     # Model training
-│   │   └── predict.py   # Prediction generation
-│   ├── draft/           # Draft strategy
-│   │   ├── vbd.py       # Value-based drafting
-│   │   ├── simulator.py # Draft simulation
-│   │   └── recommender.py
-│   └── app/             # Application interfaces
-│       └── cli.py       # Command-line interface
-├── models/              # Saved model files
-├── tests/               # Unit tests
-├── config/
-│   └── settings.yaml    # Configuration
+│   ├── data/
+│   │   ├── scraper.py        # Pulls and saves raw data via nflreadpy
+│   │   └── pipeline.py       # Cleans, merges, and saves processed data
+│   ├── features/
+│   │   └── build_features.py # Feature engineering and prediction features
+│   ├── models/
+│   │   ├── train.py          # Model training, walk-forward validation, Optuna tuning
+│   │   └── predict.py        # Generates 2026 projections from trained models
+│   └── draft/
+│       ├── vor.py            # VOR calculation and ADP integration
+│       ├── roster.py         # Draft state tracking (all 12 rosters)
+│       ├── recommend.py      # Recommendation engine
+│       └── advisor.py        # Interactive CLI draft assistant
+├── plan.txt                  # Draft advisor design spec
 ├── requirements.txt
 └── README.md
 ```
 
-## Configuration
+## Installation
 
-Edit `config/settings.yaml` to customize:
+```bash
+git clone https://github.com/Angel-Cal/Draft-Bot.git
+cd DraftBot
 
-- League settings (team count, roster positions)
-- Scoring rules (PPR, standard, custom)
-- Model parameters
-- Draft settings
+python -m venv venv
+# Windows:
+venv\Scripts\activate
+# macOS/Linux:
+source venv/bin/activate
 
-## Machine Learning Approach
+pip install -r requirements.txt
+```
 
-### Data Pipeline
-1. Scrape historical player statistics from Pro Football Reference
-2. Clean and normalize data across seasons
-3. Engineer predictive features (rolling averages, efficiency metrics, age curves)
+## Running the Pipeline
 
-### Models
-- **Baseline**: Ridge/Lasso Regression
-- **Ensemble**: Random Forest, Gradient Boosting
-- **Evaluation**: MAE, RMSE, R² with time-series cross-validation
+```bash
+# 1. Pull raw data
+python src/data/scraper.py
 
-### Draft Strategy
-- Value-Based Drafting (VBD) for cross-position comparison
-- Positional scarcity adjustments
-- Monte Carlo simulation for pick optimization
-- Real-time roster need analysis
+# 2. Process data and build features
+python src/data/pipeline.py
 
-## Development
+# 3. Tune hyperparameters and train models (writes output to output.log)
+python src/models/train.py
 
-### Running Tests
+# 4. Generate 2026 projections
+python src/models/predict.py
+```
+
+## League Settings
+
+- 12-team snake draft
+- PPR scoring
+- Roster: 1 QB, 2 RB, 3 WR, 1 TE, 1 FLEX (RB/WR/TE)
+- DST/K not modeled
+
+## Testing
 
 ```bash
 pytest tests/ -v
 ```
 
-### Adding New Features
-
-1. Add feature logic to `src/features/build_features.py`
-2. Update the pipeline in `src/data/pipeline.py`
-3. Retrain models with `python -m src.app.cli train`
-
-## Roadmap
-
-- [ ] Web interface with React frontend
-- [ ] ESPN/Yahoo/Sleeper API integration
-- [ ] Auction draft support
-- [ ] Dynasty/keeper league features
-- [ ] In-season lineup optimization
-- [ ] Reinforcement learning for draft strategy
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-MIT License - see LICENSE file for details.
+Unit tests cover all pure functions in the draft advisor (VOR calculation,
+need scoring, run detection, position safety, tier detection).
 
 ---
 
 Built as a machine learning portfolio project demonstrating:
-- Data engineering and ETL pipelines
-- Feature engineering for predictive modeling
-- Ensemble machine learning methods
-- Simulation and optimization algorithms
-- Production-ready Python application structure
+
+- End-to-end data engineering with real sports data
+- Feature engineering with leakage prevention for time-series prediction
+- Position-specific LightGBM models with walk-forward validation
+- Bayesian hyperparameter optimization with Optuna
+- Sequential decision-making under uncertainty (draft advisor)

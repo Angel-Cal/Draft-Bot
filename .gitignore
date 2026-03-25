@@ -18,18 +18,13 @@ env/
 .ipynb_checkpoints/
 
 # Data files (large files should not be committed)
-data/raw/*.csv
-data/raw/*.json
-data/raw/*.db
-data/processed/*.csv
-data/processed/*.parquet
+data/raw/*
+data/processed/*
 data/external/*
-!data/*/.gitkeep
+!data/**/.gitkeep
 
 # Model files
-models/*.pkl
-models/*.joblib
-models/*.h5
+models/*
 !models/.gitkeep
 
 # Logs
