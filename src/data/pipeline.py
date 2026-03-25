@@ -88,6 +88,17 @@ def clean_data(roster, season):
     merged_df = merged_df.merge(totals_df, on =['team', 'season'])
     print(f"After totals merge: {len(merged_df)}")
 
+    team_stats = (season.groupby(['recent_team', 'season'])
+        .agg(team_targets=('targets', 'sum'),
+             team_air_yards=('receiving_air_yards', 'sum'),
+             team_games=('games', 'max'))
+        .reset_index()
+        .rename(columns={'recent_team': 'team'}))
+    merged_df = merged_df.merge(team_stats, on=['team', 'season'], how='left')
+    merged_df['target_share'] = (merged_df['targets'] / merged_df['games']) / (merged_df['team_targets'] / merged_df['team_games'])
+    merged_df['air_yards_share'] = (merged_df['receiving_air_yards'] / merged_df['games']) / (merged_df['team_air_yards'] / merged_df['team_games'])
+    merged_df['wopr'] = 1.5 * merged_df['target_share'] + 0.7 * merged_df['air_yards_share']
+    merged_df = merged_df.drop(columns=['team_targets', 'team_air_yards', 'team_games'])
 
     return merged_df
 

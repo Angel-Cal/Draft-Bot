@@ -190,7 +190,7 @@ def compute_deltas(df, delta_df):
     for col in DELTA_SHIFT_COLS:
         df[f"{col}_delta"] = df[col] - delta_df[col]
     delta_cols = [f"{col}_delta" for col in DELTA_SHIFT_COLS]
-    df[delta_cols] = df[DELTA_SHIFT_COLS].fillna(0)
+    df[delta_cols] = df[delta_cols].fillna(0)
     return df
  
 
@@ -259,7 +259,7 @@ def build_prediction_features(df, pbp, id, snaps):
     df_2025 = df_recent[df_recent['season'] == 2025].copy()
     delta_df_2025 = delta_df[delta_df['season'] == 2025].copy()
 
-    df_2025 = add_surge_features(df_2025, pbp, id, snaps)
     df_2025 = compute_deltas(df_2025, delta_df_2025)
+    df_2025 = add_surge_features(df_2025, pbp, id, snaps)
     df_2025 = remove_cols(df_2025)
     return df_2025
