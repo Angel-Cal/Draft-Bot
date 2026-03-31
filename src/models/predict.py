@@ -26,7 +26,7 @@ def load_data():
     return prediction_df, training_df, qb_params, rb_params, wr_params,te_params
 
 def save_metadata(df):
-    df = df[["player_name", "player_id"]].copy()
+    df = df[["player_name", "player_id", "games", "games_delta"]].copy()
     return df
 
 def drop_season(df):
@@ -36,6 +36,7 @@ def drop_season(df):
 def drop_meta(df):
     df = df.drop(columns=['player_id', 'player_name'])
     return df
+
 if __name__ == "__main__":
     prediction_df, training_df, qb_params, rb_params, wr_params, te_params = load_data()
     qb_training_df, rb_training_df, wr_training_df, te_training_df = split_positions(training_df)

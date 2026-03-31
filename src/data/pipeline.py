@@ -19,6 +19,15 @@ def load_data():
 
     return seasonal, roster, pbp, id, snaps
 
+def load_predictions():
+    adp_table = pd.read_csv(Path(__file__).parent.parent.parent / "data" / "external" / "4for4-adp-table.csv")
+    qb_predictions = pd.read_parquet(PROCESSED_DIR / "qb_predictions.parquet")
+    rb_predictions = pd.read_parquet(PROCESSED_DIR / "rb_predictions.parquet")
+    wr_predictions = pd.read_parquet(PROCESSED_DIR / "wr_predictions.parquet")
+    te_predictions = pd.read_parquet(PROCESSED_DIR / "te_predictions.parquet")
+
+    return adp_table, qb_predictions, rb_predictions, wr_predictions, te_predictions
+
 def clean_data(roster, season):
     ROSTER_KEEP_COLS = [
         "gsis_id",
@@ -126,6 +135,41 @@ def load_totals():
     totals_df = pd.concat([home_df, away_df]).groupby(['team', 'season']).mean().reset_index()
     return totals_df
 
+def normalize_names(df):
+    df["merge_name"] = (df["Player"].str.lower()
+                      .str.replace(".", "", regex=False)
+                      .str.replace("'", "", regex=False)
+                      .str.replace("iii", "")
+                      .str.replace("iI", "")
+                      .str.replace("jr", "")
+                      .str.strip())
+    return df
+
+def add_player_id(adp_table, id):
+    adp_table = adp_table.drop(columns=["player_id"], errors="ignore") # prevents duplicate cols being created on each pipeline run 
+    adp_table.groupby("merge_name")
+    id.groupby("merge_name")
+    merged_table = adp_table.merge(id[["merge_name", "gsis_id"]], on="merge_name", how="left")
+    merged_table = merged_table.rename(columns={"gsis_id" : "player_id"})
+
+    return merged_table
+
+def add_adp(adp_table, prediction_df):
+    prediction_df = prediction_df.drop(columns=["underdog"], errors="ignore")
+
+    adp_table.groupby("player_id")
+    prediction_df.groupby("player_id")
+    merged_df = prediction_df.merge(adp_table[["player_id", "Underdog"]], on="player_id", how="left")
+    merged_df = merged_df.rename(columns={"Underdog" : "underdog"})
+    
+    return merged_df
+
+def fix_duplicates(adp_table):
+    NAME_TO_ID = {"oronde gadsden": "00-0040189", "kyle williams": "00-0040131", "chris brooks": "00-0038685"}
+    overrides = adp_table["merge_name"].map(NAME_TO_ID)
+    adp_table["player_id"] = overrides.combine_first(adp_table["player_id"])
+    adp_table = adp_table.drop_duplicates()
+    return adp_table
 
 if __name__ == "__main__":
     seasonal, roster, pbp, id, snaps = load_data()
@@ -136,6 +180,40 @@ if __name__ == "__main__":
     save_data(df, "training_data")
     save_data(prediction_df, "prediction_data")
     print(f"Saved {len(df)} rows to {PROCESSED_DIR}")
+
+
+    id = id[id["position"].isin(["QB", "RB", "WR", "TE"])]
+    adp_table, qb_predictions, rb_predictions, wr_predictions, te_predictions = load_predictions()
+    adp_table = normalize_names(adp_table)
+    adp_table = add_player_id(adp_table, id)
+    adp_table = fix_duplicates(adp_table)
+    adp_table = adp_table.dropna(subset=["Underdog"])
+    adp_table.to_csv(PROCESSED_DIR/ "adp_table.csv")
+    qb_predictions = add_adp(adp_table, qb_predictions)
+    qb_predictions = qb_predictions.dropna(subset=["underdog"])
+    rb_predictions = add_adp(adp_table, rb_predictions)
+    rb_predictions = rb_predictions.dropna(subset=["underdog"])
+    wr_predictions = add_adp(adp_table, wr_predictions)
+    wr_predictions = wr_predictions.dropna(subset=["underdog"])
+    te_predictions = add_adp(adp_table, te_predictions)
+    te_predictions = te_predictions.dropna(subset=["underdog"])
+
+    save_data_as_csv(qb_predictions, "qb_predictions")
+    save_data(qb_predictions, "qb_predictions")
+
+    save_data_as_csv(rb_predictions, "rb_predictions")
+    save_data(rb_predictions, "rb_predictions")
+
+    save_data_as_csv(wr_predictions, "wr_predictions")
+    save_data(wr_predictions, "wr_predictions")
+
+    save_data_as_csv(te_predictions, "te_predictions")
+    save_data(te_predictions, "te_predictions")
+
+
+
+    
+
 
 
 
